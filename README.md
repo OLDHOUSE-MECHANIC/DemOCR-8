@@ -1,145 +1,151 @@
-# ScreenReader v2.0
+# ScreenReader
 
-**Select any region on your screen → OCR → Spoken aloud. Hindi + English. 100% offline. Free forever.**
+Drag a rectangle over any part of your screen — it reads the text aloud. Works on text inside images, screenshots, memes, PDFs, anything visible on screen.
 
-Works on **Linux** (Debian/Ubuntu) and **Windows 10/11**.
+100% offline. No API. No subscription. No internet after setup.
 
 ---
 
-## What's New in v2.0
+## How it works
 
-| Feature | Details |
+1. Open the app
+2. Click **▶ Select & Read**
+3. Drag a box over whatever you want read
+4. Release — it extracts the text and speaks it
+
+That's it. No hotkeys, no background processes, no autostart.
+
+---
+
+## Stack
+
+| Component | What it does |
 |---|---|
-| **GUI Control Panel** | Full app window — no more shell running in background |
-| **Stop speech** | Kill TTS mid-sentence with one click |
-| **Replay** | Re-read the last capture with ▶ Play Last |
-| **Speed control** | Slider from 0.5× (slow) to 2.5× (fast), persists across sessions |
-| **Hindi support** | OCR + TTS in Hindi, auto-detects Devanagari text |
-| **Hindi voice** | Piper `hi_IN-female-medium` voice if available, espeak-ng `-v hi` fallback |
-| **Dark / Light theme** | Toggle with ☀/🌙 button, saves preference |
-| **History** | Last 50 captures saved — click any to re-read |
-| **Clipboard copy** | Copy OCR'd text to clipboard with one click |
-| **Windows support** | Works on Windows 10/11 with PowerShell installer |
-| **Better OCR** | Auto-invert for dark backgrounds, Devanagari-aware text cleaning |
+| **Tesseract OCR** | Extracts text from the screen region |
+| **Pillow** | Image preprocessing (contrast, sharpen, threshold) to catch embedded/stylised text |
+| **Piper TTS** | Natural offline neural voice (falls back to espeak-ng on Linux / Windows SAPI if unavailable) |
+| **Tkinter** | Minimal GUI + transparent selection overlay |
 
 ---
 
-## Install
-
-### Linux (Debian/Ubuntu/Trixie)
+## Install — Linux (Debian/Ubuntu)
 
 ```bash
-cd screenreader/
+git clone https://github.com/yourname/screenreader
+cd screenreader
 bash setup.sh
 ```
 
-Installs: Tesseract (eng+hin), espeak-ng, Piper TTS, English + Hindi voices, Python deps.
+Then launch:
 
-### Windows
-
-```powershell
-# In PowerShell (run as Administrator for Tesseract)
-Set-ExecutionPolicy -Scope CurrentUser Bypass
-.\setup_windows.ps1
-```
-
-You'll be prompted to install Tesseract separately (with Hindi language pack). Everything else is automatic.
-
----
-
-## Run
-
-**Linux:**
 ```bash
 bash run.sh
 ```
 
-**Windows:**
-```
-Double-click run.bat
-```
+Or search **ScreenReader** in your application menu.
 
-Or search **ScreenReader** in your application menu (Linux).
+`setup.sh` installs:
+- `tesseract-ocr` and `espeak-ng` via apt
+- Python packages (`Pillow`, `pytesseract`) in a local `.venv`
+- Piper TTS binary to `~/.local/share/piper`
+- `en_US-amy-medium` neural voice (~60 MB, one-time download)
+- A `.desktop` entry for your app menu
+
+Nothing auto-starts. Re-run `setup.sh` anytime to repair or update.
 
 ---
 
-## Usage
+## Install — Windows
 
-1. Press **`Ctrl + Shift + S`** anywhere — or click **⊹ Capture Region** in the app
-2. Screen dims — drag a rectangle over the text you want read
-3. Release mouse — text is OCR'd and spoken aloud
-4. The text appears in the app window — you can copy it, replay it, or adjust speed
+```
+Double-click setup_windows.bat
+```
 
-### Language Selection
+That's the whole step. It automatically downloads and installs:
 
-In the app window, set language to:
-- **eng** — English only (faster)
-- **hin** — Hindi only (Devanagari)
-- **hin+eng** — Mixed content, auto-detects which voice to use
+| | |
+|---|---|
+| Python 3.11 | (skipped if already installed) |
+| Pillow + pytesseract | via pip |
+| Tesseract OCR 5.4 64-bit | extracted to `tools\tesseract\` |
+| Piper TTS | extracted to `tools\piper\` |
+| en_US-amy-medium voice | saved to `tools\piper-voices\` |
 
-### Speed Control
+Everything goes into a `tools\` folder next to the script — nothing is written to the registry. When done, it creates `run.bat`.
 
-Use the **SPEED** slider in the app. Changes take effect on the next capture or replay.
+To launch: **double-click `run.bat`**
 
-Keyboard shortcuts (when app window is focused):
-- Increase speed: drag slider right
-- Decrease speed: drag slider left
+To pin to desktop: right-click `run.bat` → *Create shortcut* → drag shortcut to desktop.
 
-### Stop Speech
+---
 
-Click **■ Stop** in the Playback section — stops immediately.
+## Files
+
+```
+screenreader/
+├── screenreader.py        ← main program
+├── setup.sh               ← Linux one-time installer
+├── setup_windows.bat      ← Windows one-time installer
+├── run.sh                 ← Linux launcher (created by setup.sh)
+├── run.bat                ← Windows launcher (created by setup_windows.bat)
+├── win_config.py          ← Windows local tool paths (auto-generated)
+├── .venv/                 ← Python environment (Linux, created by setup.sh)
+└── tools/                 ← Tesseract + Piper binaries (Windows, created by setup_windows.bat)
+```
+
+---
+
+## Requirements
+
+**Linux**
+- Debian Trixie / Ubuntu 22.04+ (or any distro with apt)
+- Python 3.10+
+- X11 display (Wayland not tested)
+
+**Windows**
+- Windows 10 or 11, 64-bit
+- Internet connection for first-time setup (~150 MB total downloads)
+
+---
+
+## Transparency / overlay note
+
+The selection overlay uses `-transparentcolor` on X11 so the actual screen content shows through in real time — no compositor required. If you're on Wayland and the overlay appears black, switch to an X11 session (`echo $XDG_SESSION_TYPE` to check).
 
 ---
 
 ## Troubleshooting
 
-| Issue | Fix |
+| Problem | Fix |
 |---|---|
-| No voice output (Linux) | `sudo apt install espeak-ng alsa-utils` |
-| No voice output (Windows) | PowerShell SAPI is used as fallback — check Windows audio |
-| Hindi OCR not working | `sudo apt install tesseract-ocr-hin` (Linux) or re-run setup selecting Hindi in Tesseract installer (Windows) |
-| Hindi voice sounds robotic | Piper `hi_IN` voice not found — re-run setup.sh, it will download |
-| Hotkey not working | Make sure ScreenReader app window is open (check taskbar) |
-| Wayland (Linux) | Launch with `GDK_BACKEND=x11 bash run.sh` |
-| Screen capture fails | On Wayland, run.sh sets `GDK_BACKEND=x11` automatically |
-| `aplay` not found | `sudo apt install alsa-utils` |
+| Overlay is solid black | You're on Wayland — log out and choose an X11 session |
+| No audio on Linux | `sudo apt install alsa-utils` then check `aplay -l` |
+| OCR misses text | Select a larger region; zoom in first if text is tiny |
+| Piper voice not found | Re-run `setup.sh` / `setup_windows.bat` — it re-downloads |
+| Windows: "16-bit application" error | Delete the `tools\` folder and re-run `setup_windows.bat` — old installer was cached |
+| `tesseract: command not found` | Linux: `sudo apt install tesseract-ocr` |
 
 ---
 
-## File Structure
+## Changing the voice (Linux)
 
+Piper voices live in `~/.local/share/piper-voices/`. Download any voice from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) — grab the `.onnx` and `.onnx.json` pair. The app picks up the first `.onnx` it finds automatically.
+
+## Changing the voice (Windows)
+
+Drop the `.onnx` and `.onnx.json` files into `tools\piper-voices\` and update the filename in `win_config.py`.
+
+---
+
+## Kill a stuck instance
+
+```bash
+pkill -f screenreader.py
+# or if really stuck:
+pkill -9 -f screenreader.py
 ```
-screenreader/
-├── screenreader.py        ← main program (GUI + OCR + TTS)
-├── setup.sh               ← Linux one-time installer
-├── setup_windows.ps1      ← Windows one-time installer
-├── run.sh                 ← Linux launcher (auto-generated)
-├── run.bat                ← Windows launcher (auto-generated)
-└── README.md
-```
-
-Config and history are saved to:
-- **Linux:** `~/.config/screenreader/`
-- **Windows:** `%APPDATA%\ScreenReader\`
 
 ---
 
-## Voices
-
-### English
-Piper `en_US-amy-medium` — natural neural voice, ~70 MB one-time download.
-
-### Hindi
-Piper `hi_IN-female-medium` — if available from the Piper voices registry.
-Falls back to `espeak-ng -v hi` (robotic but works offline).
-
-To add more voices: download any `.onnx` + `.onnx.json` from  
-https://github.com/rhasspy/piper/blob/master/VOICES.md  
-and place in `~/.local/share/piper-voices/` (Linux) or `%APPDATA%\piper-voices\` (Windows).
-
----
-
-## Changing the Hotkey
-
-Open `screenreader.py` and edit the check in `_start_hotkey_listener()`.  
-The default is `Ctrl + Shift + S`.
+## License
+Apache 
