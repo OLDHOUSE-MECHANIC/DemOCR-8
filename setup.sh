@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ScreenReader — setup for Debian Trixie
+# DemOCR — setup for Debian/Ubuntu
 # Run once: bash setup.sh
-# Creates run.sh and a .desktop launcher. Nothing auto-starts.
+# Creates run.sh and app menu + optional desktop shortcut. Nothing auto-starts.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +15,7 @@ info() { echo -e "${G}[info]${N} $*"; }
 warn() { echo -e "${Y}[warn]${N} $*"; }
 
 echo ""
-echo "  ScreenReader — setup"
+echo "  DemOCR — setup"
 echo "  ─────────────────────"
 
 # 1. System packages
@@ -31,7 +31,7 @@ info "Setting up Python environment..."
 python3 -m venv "$VENV"
 source "$VENV/bin/activate"
 pip install --upgrade pip -q
-pip install -q Pillow pytesseract pynput
+pip install -q Pillow pytesseract
 deactivate
 
 # 3. Piper binary
@@ -84,21 +84,21 @@ if $PIPER_OK; then
 fi
 
 # 5. run.sh launcher
-cat > "$SCRIPT_DIR/run.sh" << RUN
+[ -f "$SCRIPT_DIR/run.sh" ] || cat > "$SCRIPT_DIR/run.sh" << RUN
 #!/usr/bin/env bash
 source "\$(dirname "\$0")/.venv/bin/activate"
 exec python3 "\$(dirname "\$0")/screenreader.py" "\$@"
 RUN
 chmod +x "$SCRIPT_DIR/run.sh"
 
-# 6. .desktop entry (app menu only — no autostart)
-DESK="$HOME/.local/share/applications/screenreader.desktop"
+# 6. App menu .desktop entry
+DESK="$HOME/.local/share/applications/democr.desktop"
 mkdir -p "$(dirname "$DESK")"
 cat > "$DESK" << DESKEOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=ScreenReader
+Name=DemOCR
 Comment=Select screen region and read it aloud
 Exec=$SCRIPT_DIR/run.sh
 Terminal=false
@@ -107,10 +107,32 @@ DESKEOF
 chmod +x "$DESK"
 xdg-desktop-menu forceupdate 2>/dev/null || true
 
+# 7. Desktop shortcut (optional)
+echo ""
+printf "  Create a desktop shortcut? [y/N]: "
+read -r REPLY
+if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+    DESKTOP_DIR="${XDG_DESKTOP_DIR:-$HOME/Desktop}"
+    mkdir -p "$DESKTOP_DIR"
+    SHORTCUT="$DESKTOP_DIR/DemOCR.desktop"
+    cp "$DESK" "$SHORTCUT"
+    chmod +x "$SHORTCUT"
+    # Mark as trusted so XFCE/GNOME/Nautilus shows it as a launcher, not a text file
+    gio set "$SHORTCUT" metadata::trusted true 2>/dev/null || true
+    info "Desktop shortcut created."
+else
+    info "Skipping desktop shortcut."
+fi
+
 echo ""
 echo "  ─────────────────────"
 echo "  Done."
 echo ""
+echo "  Component status:"
+command -v tesseract &>/dev/null && echo "  ✓ Tesseract" || echo "  ✗ Tesseract — run: sudo apt install tesseract-ocr"
+$PIPER_OK && echo "  ✓ Piper binary" || echo "  ✗ Piper (will use espeak-ng)"
+find "$VOICES_DIR" -name "*.onnx" 2>/dev/null | grep -q . && echo "  ✓ Voice model" || echo "  ✗ Voice model (will use espeak-ng)"
+echo ""
 echo "  To launch:  bash $SCRIPT_DIR/run.sh"
-echo "  Or search 'ScreenReader' in your app menu."
+echo "  Or search 'DemOCR' in your app menu."
 echo ""
