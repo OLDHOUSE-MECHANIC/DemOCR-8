@@ -6,7 +6,7 @@ No hotkeys. No autostart. 100% offline.
 """
 
 import os, sys, subprocess, threading, tempfile, time, re, logging, tkinter as tk
-from PIL import Image, ImageGrab, ImageEnhance, ImageFilter
+from PIL import Image, ImageGrab, ImageEnhance, ImageFilter, ImageTk
 import pytesseract
 
 IS_WIN = sys.platform.startswith("win")
@@ -158,8 +158,12 @@ def _speak_worker(text: str):
             log.warning(f"Piper error: {e} — falling back")
         finally:
             if wav:
-                try: os.unlink(wav)
-                except: pass
+                for _ in range(3):
+                    try:
+                        os.unlink(wav)
+                        break
+                    except OSError:
+                        time.sleep(0.1)
 
     # ── Fallback ──────────────────────────────────────────────────────────────
     if IS_WIN:
@@ -267,6 +271,10 @@ def preprocess(img: Image.Image) -> Image.Image:
     img = ImageEnhance.Contrast(img).enhance(2.5)
     img = img.filter(ImageFilter.SHARPEN).filter(ImageFilter.SHARPEN)
     img = img.convert("L")
+    # Auto-invert for light-on-dark content (terminals, dark-mode apps)
+    avg = sum(img.getdata()) / (img.width * img.height)
+    if avg < 128:
+        img = img.point(lambda x: 255 - x)
     img = img.point(lambda x: 0 if x < 140 else 255, "1").convert("L")
     return img
 
@@ -281,7 +289,12 @@ def ocr(img: Image.Image) -> str:
                 results.append(c)
         except Exception as e:
             log.warning(f"OCR psm={psm}: {e}")
-    return max(results, key=len) if results else ""
+    if not results:
+        return ""
+    def _score(text):
+        words = re.findall(r"[a-zA-Z]{2,}", text)
+        return len(words) / max(len(text), 1)
+    return max(results, key=_score)
 
 def _clean(text: str) -> str:
     if not text: return ""
@@ -304,25 +317,29 @@ def grab_region(x1, y1, x2, y2) -> Image.Image:
     if IS_WIN:
         try:
             import ctypes
-            # Get DPI scale factor (physical / logical)
+            # Only scale if the process is NOT DPI-aware (awareness == 0)
             awareness = ctypes.c_int()
             ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
-            scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
-            if scale != 1.0:
-                x1 = int(x1 * scale); y1 = int(y1 * scale)
-                x2 = int(x2 * scale); y2 = int(y2 * scale)
+            if awareness.value == 0:
+                dc = ctypes.windll.user32.GetDC(0)
+                dpi = ctypes.windll.gdi32.GetDeviceCaps(dc, 88)  # LOGPIXELSX
+                ctypes.windll.user32.ReleaseDC(0, dc)
+                scale = dpi / 96.0
+                if scale != 1.0:
+                    x1 = int(x1 * scale); y1 = int(y1 * scale)
+                    x2 = int(x2 * scale); y2 = int(y2 * scale)
         except Exception:
-            pass  # if DPI query fails, just use coords as-is
+            pass  # if DPI query fails, use coords as-is
     return ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
 
 # ─── Crop Overlay ─────────────────────────────────────────────────────────────
 class CropOverlay:
     """
     Full-screen selection overlay.
-    Linux/X11 : -transparentcolor → real screen shows through (no compositor needed)
-    Windows   : -alpha 0.35 dark tint (transparentcolor makes canvas click-through on Win)
+    Takes a screenshot first, then displays it as the canvas background with a
+    dark tint drawn on top. No compositor, no -alpha, no -transparentcolor needed.
+    Works on XFCE4/Xfwm4, Openbox, i3, and any other WM/compositor.
     """
-    TRANS = "#010101"
 
     def __init__(self, on_done, on_cancel):
         self.on_done   = on_done
@@ -330,24 +347,26 @@ class CropOverlay:
         self.sx = self.sy = self.cx = self.cy = 0
         self.pressed = False
 
+        # Grab the full screen before opening the overlay window
+        screenshot = ImageGrab.grab(all_screens=True)
+        sw, sh = screenshot.size
+
         self.win = tk.Toplevel()
-        sw = self.win.winfo_screenwidth()
-        sh = self.win.winfo_screenheight()
         self.win.geometry(f"{sw}x{sh}+0+0")
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
 
-        if IS_WIN:
-            bg = "#1a1a1a"
-            self.win.configure(bg=bg)
-            self.win.attributes("-alpha", 0.35)
-        else:
-            bg = self.TRANS
-            self.win.configure(bg=bg)
-            self.win.attributes("-transparentcolor", self.TRANS)
+        self.canvas = tk.Canvas(self.win, width=sw, height=sh,
+                                highlightthickness=0, cursor="crosshair")
+        self.canvas.pack()
 
-        self.canvas = tk.Canvas(self.win, bg=bg, highlightthickness=0, cursor="crosshair")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        # Draw screenshot as background, then a semi-transparent dark tint on top
+        from PIL import ImageDraw
+        tinted = screenshot.copy().convert("RGBA")
+        overlay = Image.new("RGBA", tinted.size, (0, 0, 0, 100))  # ~40% dark tint
+        tinted = Image.alpha_composite(tinted, overlay).convert("RGB")
+        self._bg = ImageTk.PhotoImage(tinted)
+        self.canvas.create_image(0, 0, anchor="nw", image=self._bg)
 
         self.hint = tk.Label(self.win, text=" Select region — ESC to cancel ",
                              bg="#1a1a1a", fg="#FF6B00", font=("Sans", 9), pady=2)
@@ -373,10 +392,9 @@ class CropOverlay:
         self.canvas.delete("sel")
         x1 = min(self.sx, self.cx); y1 = min(self.sy, self.cy)
         x2 = max(self.sx, self.cx); y2 = max(self.sy, self.cy)
-        fill = self.TRANS if not IS_WIN else ""
         self.canvas.create_rectangle(x1, y1, x2, y2,
             outline=CONFIG["sel_color"], width=CONFIG["sel_width"],
-            fill=fill, tags="sel")
+            fill="", tags="sel")
         w, h = x2 - x1, y2 - y1
         if w > 50 and h > 18:
             self.canvas.create_text(x1 + w//2, y1 + h//2,
@@ -389,7 +407,7 @@ class CropOverlay:
         x1 = min(self.sx, self.cx); y1 = min(self.sy, self.cy)
         x2 = max(self.sx, self.cx); y2 = max(self.sy, self.cy)
         self.win.destroy()
-        if (x2 - x1) > 5 and (y2 - y1) > 5:
+        if (x2 - x1) > 20 and (y2 - y1) > 20:
             self.on_done(x1, y1, x2, y2)
         else:
             self.on_cancel()
@@ -480,7 +498,7 @@ class ControlPanel:
             self.root.after(0, self._set, "Error — see terminal")
         finally:
             self._busy = False
-            self.root.after(0, self._btn.config, {"state": tk.NORMAL})
+            self.root.after(0, lambda: self._btn.config(state=tk.NORMAL))
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _notify(title, body):
