@@ -1,151 +1,128 @@
-# ScreenReader
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![Tesseract](https://img.shields.io/badge/Tesseract-OCR-green)
+![Platform](https://img.shields.io/badge/Platform-Linux%20|%20Windows-lightgrey)
+![License](https://img.shields.io/badge/License-Apache%202.0-orange)
+![Offline](https://img.shields.io/badge/Offline-100%25-brightgreen)
 
-Drag a rectangle over any part of your screen — it reads the text aloud. Works on text inside images, screenshots, memes, PDFs, anything visible on screen.
+# DemOCR-8
 
-100% offline. No API. No subscription. No internet after setup.
+Drag a box over anything on your screen, and "THE THING" reads it out loud for ya!. Text in images, screenshots, memes, PDFs, whatever. If you can see it, this can read it.
 
----
-
-## How it works
-
-1. Open the app
-2. Click **▶ Select & Read**
-3. Drag a box over whatever you want read
-4. Release — it extracts the text and speaks it
-
-That's it. No hotkeys, no background processes, no autostart.
+Plus: 100% offline. No API. No subscription. No internet after setup.
 
 ---
 
-## Stack
+## Why I Built This?
 
-| Component | What it does |
-|---|---|
-| **Tesseract OCR** | Extracts text from the screen region |
-| **Pillow** | Image preprocessing (contrast, sharpen, threshold) to catch embedded/stylised text |
-| **Piper TTS** | Natural offline neural voice (falls back to espeak-ng on Linux / Windows SAPI if unavailable) |
-| **Tkinter** | Minimal GUI + transparent selection overlay |
+Started as a single file with a TTS module — copy the text, feed it in, it speaks. Did the job. But copy-pasting got old. We're apparently in the era of AI taking over industries and somehow manually selecting text had become the most exhausting part of my day.
+
+Thought screenshotting would be easier. Then came the obvious problem — how does it find the text inside an image? Spent about a week on that, landed on OCR. Wasn't the original plan but it became the whole backbone so it ended up in the name.
+
+Voice was robotic for a while. Piper fixed that.
+
+Then my brother wanted his own version. So now it runs on Windows too with an actual setup and GUI so people besides me can use it.
+
+Honestly, I made this because I was tired of having to read Book. Wanted to just listen instead. Turns out building your own audiobook machine is apparently what it takes.
 
 ---
 
-## Install — Linux (Debian/Ubuntu)
+## What It Does
+
+Select a region, it reads it. That's the whole thing.
+
+Works on anything visible — images, PDFs, scanned docs, that one meme with text your friend sent. No copy-pasting, no cloud, nothing phoning home. Just OCR → voice, locally, every time.
+
+---
+
+## Jump-Start — Linux
 
 ```bash
-git clone https://github.com/yourname/screenreader
-cd screenreader
+git clone https://github.com/OLDHOUSE-MECHANIC/DemOCR-8
+cd DemOCR-8
 bash setup.sh
-```
-
-Then launch:
-
-```bash
 bash run.sh
 ```
 
-Or search **ScreenReader** in your application menu.
+Or search **ScreenReader** in your app menu if that's more your thing.
 
-`setup.sh` installs:
-- `tesseract-ocr` and `espeak-ng` via apt
-- Python packages (`Pillow`, `pytesseract`) in a local `.venv`
-- Piper TTS binary to `~/.local/share/piper`
-- `en_US-amy-medium` neural voice (~60 MB, one-time download)
-- A `.desktop` entry for your app menu
+`setup.sh` handles tesseract, espeak-ng, a local `.venv`, Piper TTS, and the neural voice (~60 MB one-time). Nothing auto-starts. Re-run it if something breaks.
 
-Nothing auto-starts. Re-run `setup.sh` anytime to repair or update.
 
 ---
 
-## Install — Windows
-
-```
+## Jump-Start — Windows
 Double-click setup_windows.bat
-```
+Genuinely the whole step. Downloads everything, drops it into a `tools\` folder, nothing touches the registry. You get `run.bat` when it's done.
 
-That's the whole step. It automatically downloads and installs:
+Launch: **double-click `run.bat`**  
+Pin it: right-click → *Create shortcut* → drag to desktop.
 
-| | |
+---
+
+## The Stack (if you're curious)
+
+| Component | What it does |
 |---|---|
-| Python 3.11 | (skipped if already installed) |
-| Pillow + pytesseract | via pip |
-| Tesseract OCR 5.4 64-bit | extracted to `tools\tesseract\` |
-| Piper TTS | extracted to `tools\piper\` |
-| en_US-amy-medium voice | saved to `tools\piper-voices\` |
+| **Tesseract OCR** | Finds and pulls text out of the selected region |
+| **Pillow** | Cleans the image up so it doesn't fumble stylised or embedded text |
+| **Piper TTS** | Offline neural voice — sounds like an actual person |
+| **Tkinter** | The GUI and transparent selection overlay |
 
-Everything goes into a `tools\` folder next to the script — nothing is written to the registry. When done, it creates `run.bat`.
 
-To launch: **double-click `run.bat`**
+## What You Need
 
-To pin to desktop: right-click `run.bat` → *Create shortcut* → drag shortcut to desktop.
+**Linux** — Debian Trixie / Ubuntu 22.04+ with apt, Even Arch linux! Python 3.10+, X11 (Wayland untested and probably broken)  
+**Windows** — Windows 10/11 64-bit, internet for first-time setup (~150 MB total)
 
----
 
-## Files
 
-```
-screenreader/
-├── screenreader.py        ← main program
-├── setup.sh               ← Linux one-time installer
-├── setup_windows.bat      ← Windows one-time installer
-├── run.sh                 ← Linux launcher (created by setup.sh)
-├── run.bat                ← Windows launcher (created by setup_windows.bat)
-├── win_config.py          ← Windows local tool paths (auto-generated)
-├── .venv/                 ← Python environment (Linux, created by setup.sh)
-└── tools/                 ← Tesseract + Piper binaries (Windows, created by setup_windows.bat)
+## Something Not Working?
+
+**Overlay is solid black** — you're on Wayland. Log out, pick an X11 session. Run `echo $XDG_SESSION_TYPE` if you're unsure which you're on. The overlay uses `-transparentcolor` on X11 to show the actual screen through — Wayland doesn't do that.
+
+**No audio on Linux**:
+```bash
+sudo apt install alsa-utils
+aplay -l  # check if your device shows up
 ```
 
----
+**OCR missing text** — select a bigger area, or zoom in before selecting. Tiny text is still a weak spot.
 
-## Requirements
+**Piper voice not found** — re-run the setup script, it re-downloads everything.
 
-**Linux**
-- Debian Trixie / Ubuntu 22.04+ (or any distro with apt)
-- Python 3.10+
-- X11 display (Wayland not tested)
+**Windows "16-bit application" error** — old installer got cached. Delete `tools\` and re-run `setup_windows.bat`.
 
-**Windows**
-- Windows 10 or 11, 64-bit
-- Internet connection for first-time setup (~150 MB total downloads)
+**`tesseract: command not found`**:
+```bash
+sudo apt install tesseract-ocr
+```
 
 ---
 
-## Transparency / overlay note
+## Swapping the Voice
 
-The selection overlay uses `-transparentcolor` on X11 so the actual screen content shows through in real time — no compositor required. If you're on Wayland and the overlay appears black, switch to an X11 session (`echo $XDG_SESSION_TYPE` to check).
+**Linux** — voices live in `~/.local/share/piper-voices/`. Grab any `.onnx` + `.onnx.json` pair from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices), drop them in, app picks up the first `.onnx` it finds.
 
----
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| Overlay is solid black | You're on Wayland — log out and choose an X11 session |
-| No audio on Linux | `sudo apt install alsa-utils` then check `aplay -l` |
-| OCR misses text | Select a larger region; zoom in first if text is tiny |
-| Piper voice not found | Re-run `setup.sh` / `setup_windows.bat` — it re-downloads |
-| Windows: "16-bit application" error | Delete the `tools\` folder and re-run `setup_windows.bat` — old installer was cached |
-| `tesseract: command not found` | Linux: `sudo apt install tesseract-ocr` |
+**Windows** — same files go into `tools\piper-voices\`, update the filename in `win_config.py`.
 
 ---
 
-## Changing the voice (Linux)
-
-Piper voices live in `~/.local/share/piper-voices/`. Download any voice from [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) — grab the `.onnx` and `.onnx.json` pair. The app picks up the first `.onnx` it finds automatically.
-
-## Changing the voice (Windows)
-
-Drop the `.onnx` and `.onnx.json` files into `tools\piper-voices\` and update the filename in `win_config.py`.
-
----
-
-## Kill a stuck instance
+## Kill a Stuck Instance
 
 ```bash
 pkill -f screenreader.py
-# or if really stuck:
+# really stuck:
 pkill -9 -f screenreader.py
 ```
 
 ---
 
+## What's Next
+
+Palette customisation, playback controls, and a hands-free reading mode. Basically making it a proper audiobook experience without needing to buy one.
+
+---
+
 ## License
-Apache 
+
+Apache 2.0 — see LICENSE
